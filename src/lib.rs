@@ -60,7 +60,7 @@ where I: Iterator<Item = (f64, T)>,
         }
 
         let entry = WsworEntry {
-            weight: w * dist.next().unwrap(),
+            weight: dist.next().unwrap() / w,
             val: v,
         };
 
