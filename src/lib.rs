@@ -5,7 +5,7 @@
 
 use core::cmp::Ordering;
 use std::collections::BinaryHeap;
-use rand::Rng;
+use rand::RngCore;
 use rand::distributions::Distribution;
 
 #[derive(Debug, Fail)]
@@ -40,7 +40,7 @@ impl<T> Ord for WsworEntry<T> {
 
 pub fn wswor<T, I, R>(iter: I, rng: &mut R, count: usize) -> Result<Box<[T]>, HasInvalidWeights>
 where I: Iterator<Item = (f64, T)>,
-      R: Rng {
+      R: RngCore {
     use core::num::FpCategory::*;
 
     let mut heap = BinaryHeap::with_capacity(count + 1);
