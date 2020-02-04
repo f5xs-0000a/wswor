@@ -1,12 +1,14 @@
 // Based on the section "One-pass sampling" in Kirill Müller's paper
 // "Accelerating weighted random sampling without
 
-#[macro_use] extern crate failure;
+#[macro_use]
+extern crate failure;
 
 use core::cmp::Ordering;
-use std::collections::BinaryHeap;
-use rand::RngCore;
+use core::num::FpCategory::*;
 use rand::distributions::Distribution;
+use rand::RngCore;
+use std::collections::BinaryHeap;
 
 #[derive(Debug, Fail)]
 #[fail(display = "Cannot sample over values with negative, NaN, or infinite weights.")]
@@ -29,8 +31,7 @@ impl<T> PartialEq for WsworEntry<T> {
     }
 }
 
-impl<T> Eq for WsworEntry<T> {
-}
+impl<T> Eq for WsworEntry<T> {}
 
 impl<T> Ord for WsworEntry<T> {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -38,46 +39,127 @@ impl<T> Ord for WsworEntry<T> {
     }
 }
 
-pub fn wswor<T, I, R>(iter: I, rng: &mut R, count: usize) -> Result<Box<[T]>, HasInvalidWeights>
-where I: Iterator<Item = (f64, T)>,
-      R: RngCore {
-    use core::num::FpCategory::*;
+////////////////////////////////////////////////////////////////////////////////
 
-    let mut heap = BinaryHeap::with_capacity(count + 1);
-    let mut dist = rand::distributions::Exp1.sample_iter(rng);
+pub struct StreamingWswor<T> {
+    count: usize,
+    heap: BinaryHeap<WsworEntry<T>>,
+}
 
-    let mut cur_index = 0;
+impl<T> StreamingWswor<T> {
+    pub fn new(count: usize) -> StreamingWswor<T> {
+        StreamingWswor {
+            count,
+            heap: BinaryHeap::with_capacity(count + 1),
+        }
+    }
 
-    for (w, v) in iter {
-        match w.classify() {
+    /// NOTE: the consumption of the iterator will be halted prematurely if an
+    /// invalid weight is detected
+    pub fn feed_iter<R: RngCore>(
+        &mut self,
+        iter: impl Iterator<Item = (f64, T)>,
+        rng: &mut R,
+    ) -> Result<(), HasInvalidWeights> {
+        for (w, v) in iter {
+            self.feed(v, w, rng)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn feed<R: RngCore>(
+        &mut self,
+        val: T,
+        weight: f64,
+        rng: &mut R,
+    ) -> Result<(), HasInvalidWeights> {
+        match weight.classify() {
             Nan | Infinite => Err(HasInvalidWeights)?,
-            Zero => continue, // just skip ahead if it's a zero (side-effect)
             _ => {}
         }
 
-        if w.is_sign_negative() {
+        if weight.is_sign_negative() {
             Err(HasInvalidWeights)?;
         }
 
+        let mut dist = rand::distributions::Exp1.sample_iter(rng);
+
         let entry = WsworEntry {
-            weight: dist.next().unwrap() / w,
-            val: v,
+            val,
+            weight: {
+                if weight == 0. {
+                    core::f64::MIN
+                } else {
+                    dist.next().unwrap() / weight
+                }
+            },
         };
 
-        heap.push(entry);
+        self.heap.push(entry);
 
-        if cur_index >= count {
-            heap.pop();
+        if self.heap.len() >= self.count {
+            self.heap.pop();
         }
 
-        cur_index += 1;
+        Ok(())
     }
 
-    // return only the values; take their weights away
-    Ok(
-        heap.into_iter()
-            .map(|entry| entry.val)
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
-    )
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.heap.iter().map(|entry| &entry.val)
+    }
+
+    pub fn take(self) -> impl Iterator<Item = T> {
+        self.heap.into_iter().map(|entry| entry.val)
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+pub struct SingleStreamingWs<T>(StreamingWswor<T>);
+
+impl<T> SingleStreamingWs<T> {
+    pub fn new() -> SingleStreamingWs<T> {
+        SingleStreamingWs(StreamingWswor::new(1))
+    }
+
+    pub fn feed<R: RngCore>(
+        &mut self,
+        val: T,
+        weight: f64,
+        rng: &mut R,
+    ) -> Result<(), HasInvalidWeights> {
+        self.0.feed(val, weight, rng)
+    }
+
+    pub fn feed_iter<R: RngCore>(
+        &mut self,
+        iter: impl Iterator<Item = (f64, T)>,
+        rng: &mut R,
+    ) -> Result<(), HasInvalidWeights> {
+        self.0.feed_iter(iter, rng)
+    }
+
+    pub fn get(&self) -> Option<&T> {
+        self.0.iter().next()
+    }
+
+    pub fn take(self) -> Option<T> {
+        self.0.take().next()
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+pub fn wswor<T, R>(
+    iter: impl Iterator<Item = (f64, T)>,
+    rng: &mut R,
+    count: usize,
+) -> Result<impl Iterator<Item = T>, HasInvalidWeights>
+where
+    R: RngCore,
+{
+    let mut heap = StreamingWswor::new(count);
+    heap.feed_iter(iter, rng)?;
+    Ok(heap.take())
 }
