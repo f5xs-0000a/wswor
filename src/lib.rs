@@ -4,37 +4,55 @@
 #[macro_use]
 extern crate failure;
 
-use core::cmp::Ordering;
-use core::num::FpCategory::*;
-use rand::distributions::Distribution;
-use rand::RngCore;
+use core::{
+    cmp::Ordering,
+    num::FpCategory::*,
+};
+use rand::{
+    distributions::Distribution,
+    RngCore,
+};
 use std::collections::BinaryHeap;
 
 #[derive(Debug, Fail)]
-#[fail(display = "Cannot sample over values with negative, NaN, or infinite weights.")]
+#[fail(display = "Cannot sample over values with negative, NaN, or infinite \
+                  weights.")]
 pub struct HasInvalidWeights;
 
 struct WsworEntry<T> {
     weight: f64,
-    val: T,
+    val:    T,
 }
 
 impl<T> PartialOrd for WsworEntry<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<Ordering>
+    {
         self.weight.partial_cmp(&other.weight)
     }
 }
 
 impl<T> PartialEq for WsworEntry<T> {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool
+    {
         self.weight.eq(&other.weight)
     }
 }
 
-impl<T> Eq for WsworEntry<T> {}
+impl<T> Eq for WsworEntry<T> {
+}
 
 impl<T> Ord for WsworEntry<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> Ordering
+    {
         self.weight.partial_cmp(&other.weight).unwrap()
     }
 }
@@ -43,7 +61,7 @@ impl<T> Ord for WsworEntry<T> {
 
 pub struct StreamingWswor<T> {
     count: usize,
-    heap: BinaryHeap<WsworEntry<T>>,
+    heap:  BinaryHeap<WsworEntry<T>>,
 }
 
 impl<T> StreamingWswor<T> {
@@ -60,7 +78,8 @@ impl<T> StreamingWswor<T> {
         &mut self,
         iter: impl Iterator<Item = (f64, T)>,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights> {
+    ) -> Result<(), HasInvalidWeights>
+    {
         for (w, v) in iter {
             self.feed(v, w, rng)?;
         }
@@ -73,10 +92,11 @@ impl<T> StreamingWswor<T> {
         val: T,
         weight: f64,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights> {
+    ) -> Result<(), HasInvalidWeights>
+    {
         match weight.classify() {
             Nan | Infinite => Err(HasInvalidWeights)?,
-            _ => {}
+            _ => {},
         }
 
         if weight.is_sign_negative() {
@@ -90,7 +110,8 @@ impl<T> StreamingWswor<T> {
             weight: {
                 if weight == 0. {
                     core::f64::MIN
-                } else {
+                }
+                else {
                     dist.next().unwrap() / weight
                 }
             },
@@ -128,7 +149,8 @@ impl<T> SingleStreamingWs<T> {
         val: T,
         weight: f64,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights> {
+    ) -> Result<(), HasInvalidWeights>
+    {
         self.0.feed(val, weight, rng)
     }
 
@@ -136,7 +158,8 @@ impl<T> SingleStreamingWs<T> {
         &mut self,
         iter: impl Iterator<Item = (f64, T)>,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights> {
+    ) -> Result<(), HasInvalidWeights>
+    {
         self.0.feed_iter(iter, rng)
     }
 
