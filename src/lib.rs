@@ -98,7 +98,7 @@ impl<T> StreamingWswor<T> {
 
         self.heap.push(entry);
 
-        if self.heap.len() >= self.count {
+        if self.heap.len() > self.count {
             self.heap.pop();
         }
 
