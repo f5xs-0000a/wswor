@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["F5XS <f5xs.0000a@gmail.com>"]
 edition = "2018"
 
+[features]
+gitversion = []
+
 [dependencies]
 rand = "0.7"
+rand_distr = "0.2"
 failure = "0.1"
+git-version = "0.3"

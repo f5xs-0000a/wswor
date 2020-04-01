@@ -4,6 +4,8 @@
 #[macro_use]
 extern crate failure;
 
+////////////////////////////////////////////////////////////////////////////////
+
 use core::{
     cmp::Ordering,
     num::FpCategory::*,
@@ -13,6 +15,9 @@ use rand::{
     RngCore,
 };
 use std::collections::BinaryHeap;
+use rand_distr::Exp1;
+
+////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, Fail)]
 #[fail(display = "Cannot sample over values with negative, NaN, or infinite \
@@ -103,7 +108,7 @@ impl<T> StreamingWswor<T> {
             Err(HasInvalidWeights)?;
         }
 
-        let mut dist = rand::distributions::Exp1.sample_iter(rng);
+        let mut dist = Exp1.sample_iter(rng);
 
         let entry = WsworEntry {
             val,
@@ -112,7 +117,8 @@ impl<T> StreamingWswor<T> {
                     core::f64::MIN
                 }
                 else {
-                    dist.next().unwrap() / weight
+                    let random: f64 = dist.next().unwrap();
+                    random / weight
                 }
             },
         };
@@ -185,4 +191,11 @@ where
     let mut heap = StreamingWswor::new(count);
     heap.feed_iter(iter, rng)?;
     Ok(heap.take())
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "gitversion")]
+pub fn git_version() -> &'static str {
+    git_version::git_version!()
 }
