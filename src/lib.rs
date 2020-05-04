@@ -19,13 +19,27 @@ use rand_distr::Exp1;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#[cfg(feature = "FLOAT32")]
+type FLOAT = f32;
+
+#[cfg(feature = "FLOAT32")]
+use core::f32 as COREFLOAT;
+
+#[cfg(not(feature = "FLOAT32"))]
+type FLOAT = f64;
+
+#[cfg(not(feature = "FLOAT32"))]
+use core::f64 as COREFLOAT;
+
+////////////////////////////////////////////////////////////////////////////////
+
 #[derive(Debug, Fail)]
 #[fail(display = "Cannot sample over values with negative, NaN, or infinite \
                   weights.")]
 pub struct HasInvalidWeights;
 
 struct WsworEntry<T> {
-    weight: f64,
+    weight: FLOAT,
     val:    T,
 }
 
@@ -81,7 +95,7 @@ impl<T> StreamingWswor<T> {
     /// invalid weight is detected
     pub fn feed_iter<R: RngCore>(
         &mut self,
-        iter: impl Iterator<Item = (f64, T)>,
+        iter: impl Iterator<Item = (FLOAT, T)>,
         rng: &mut R,
     ) -> Result<(), HasInvalidWeights>
     {
@@ -95,7 +109,7 @@ impl<T> StreamingWswor<T> {
     pub fn feed<R: RngCore>(
         &mut self,
         val: T,
-        weight: f64,
+        weight: FLOAT,
         rng: &mut R,
     ) -> Result<(), HasInvalidWeights>
     {
@@ -114,10 +128,10 @@ impl<T> StreamingWswor<T> {
             val,
             weight: {
                 if weight == 0. {
-                    core::f64::MIN
+                    COREFLOAT::MAX
                 }
                 else {
-                    let random: f64 = dist.next().unwrap();
+                    let random: FLOAT = dist.next().unwrap();
                     random / weight
                 }
             },
@@ -153,7 +167,7 @@ impl<T> SingleStreamingWs<T> {
     pub fn feed<R: RngCore>(
         &mut self,
         val: T,
-        weight: f64,
+        weight: FLOAT,
         rng: &mut R,
     ) -> Result<(), HasInvalidWeights>
     {
@@ -162,7 +176,7 @@ impl<T> SingleStreamingWs<T> {
 
     pub fn feed_iter<R: RngCore>(
         &mut self,
-        iter: impl Iterator<Item = (f64, T)>,
+        iter: impl Iterator<Item = (FLOAT, T)>,
         rng: &mut R,
     ) -> Result<(), HasInvalidWeights>
     {
@@ -181,7 +195,7 @@ impl<T> SingleStreamingWs<T> {
 ////////////////////////////////////////////////////////////////////////////////
 
 pub fn wswor<T, R>(
-    iter: impl Iterator<Item = (f64, T)>,
+    iter: impl Iterator<Item = (FLOAT, T)>,
     rng: &mut R,
     count: usize,
 ) -> Result<impl Iterator<Item = T>, HasInvalidWeights>
