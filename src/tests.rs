@@ -219,8 +219,7 @@ fn test_single_streaming_ws_weighted_distribution() {
     let mut counts = HashMap::new();
 
     for _ in 0 .. 1000 {
-        let mut sampler: SingleStreamingWs<f64, i32> =
-            SingleStreamingWs::new();
+        let mut sampler: SingleStreamingWs<f64, i32> = SingleStreamingWs::new();
         sampler.feed(1, 1.0, &mut rng).unwrap();
         sampler.feed(2, 9.0, &mut rng).unwrap(); // 9x more likely
 
@@ -354,8 +353,7 @@ fn test_single_streaming_uniform_distribution() {
     let trials = 8000;
 
     for _ in 0 .. trials {
-        let mut sampler: SingleStreamingWs<f64, i32> =
-            SingleStreamingWs::new();
+        let mut sampler: SingleStreamingWs<f64, i32> = SingleStreamingWs::new();
         for i in 1 ..= 8 {
             sampler.feed(i, 1.0, &mut rng).unwrap(); // All equal weights
         }
@@ -618,10 +616,7 @@ fn test_streaming_wswor_large_population() {
         .map(|i| *counts.get(&i).unwrap_or(&0))
         .max()
         .unwrap_or(0);
-    assert_eq!(
-        count_50, max_count,
-        "Item 50 should have the highest count"
-    );
+    assert_eq!(count_50, max_count, "Item 50 should have the highest count");
 }
 
 /// Tests reservoir sampling with mixed zero and positive weights. Verifies

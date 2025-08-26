@@ -161,9 +161,26 @@ where
             },
         };
 
+        // if our sample size is zero, empty the reservoir, then exit
+        // make sure that the rng state is modified for consistency
+        if self.count == 0 {
+            while self.heap.pop().is_some() {}
+
+            return Ok(());
+        }
+
+        // a really fast guard so we don't have to push and then drop the same
+        // element in case what we're inserting won't really make it into the
+        // list
+        if self.count <= self.heap.len() {
+            if self.heap.peek().unwrap().weight < entry.weight {
+                return Ok(());
+            }
+        }
+
         self.heap.push(entry);
 
-        if self.heap.len() > self.count {
+        if self.count < self.heap.len() {
             self.heap.pop();
         }
 
