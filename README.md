@@ -13,7 +13,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-wswor = { git = "git@github.com:f5xs-0000a/wswor.git" }
+wswor = { git = "https://github.com/f5xs-0000a/wswor.git" }
 ```
 
 ### Quick Start
