@@ -1,15 +1,14 @@
 [package]
 name = "wswor"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["F5XS <f5xs.0000a@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [features]
 FLOAT32 = []
 gitversion = []
 
 [dependencies]
-rand = "0.8"
-rand_distr = "0.4"
-failure = "0.1"
-git-version = "0.3"
+num = "0.4"
+rand = "0.9"
+rand_distr = "0.5"

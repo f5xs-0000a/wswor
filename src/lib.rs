@@ -1,90 +1,113 @@
-// Based on the section "One-pass sampling" in Kirill Müller's paper
-// "Accelerating weighted random sampling without
-
-#[macro_use]
-extern crate failure;
-
-////////////////////////////////////////////////////////////////////////////////
+// Based on the section "One-pass sampling" from Müller (2016).
+//
+// - Müller, K. (2016). Accelerating weighted random sampling without replacement. Arbeitsberichte Verkehrs- Und Raumplanung, 1141. https://www.research-collection.ethz.ch/mapping/view/pub:176429
 
 use core::{
     cmp::Ordering,
     num::FpCategory::*,
 };
+use std::{
+    collections::BinaryHeap,
+    fmt::Display,
+    error::Error,
+};
+
+use num::Float;
 use rand::{
-    distributions::Distribution,
+    distr::Distribution,
     RngCore,
 };
-use std::collections::BinaryHeap;
 use rand_distr::Exp1;
 
-////////////////////////////////////////////////////////////////////////////////
-
-#[cfg(feature = "FLOAT32")]
-type FLOAT = f32;
-
-#[cfg(feature = "FLOAT32")]
-use core::f32 as COREFLOAT;
-
-#[cfg(not(feature = "FLOAT32"))]
-type FLOAT = f64;
-
-#[cfg(not(feature = "FLOAT32"))]
-use core::f64 as COREFLOAT;
-
-////////////////////////////////////////////////////////////////////////////////
-
-#[derive(Debug, Fail)]
-#[fail(display = "Cannot sample over values with negative, NaN, or infinite \
-                  weights.")]
-pub struct HasInvalidWeights;
-
-struct WsworEntry<T> {
-    weight: FLOAT,
-    val:    T,
+#[derive(Debug)]
+pub enum HasInvalidWeights {
+    NaN,
+    Infinite,
+    Negative,
 }
 
-impl<T> PartialOrd for WsworEntry<T> {
+impl Display for HasInvalidWeights {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Cannot sample over values with {} weights.", match self {
+            HasInvalidWeights::NaN => "NaN",
+            HasInvalidWeights::Infinite => "infinite",
+            HasInvalidWeights::Negative => "negative",
+        })
+    }
+}
+
+impl Error for HasInvalidWeights {}
+
+impl HasInvalidWeights {
+    fn check_weight<F: Float>(weight: &F) -> Result<(), Self> {
+        // infinite and NaNs are invalid weights
+        match weight.classify() {
+            Nan => Err(Self::NaN)?,
+            Infinite => Err(Self::Infinite)?,
+            _ => {},
+        }
+
+        // so are negative weights
+        if weight.is_sign_negative() {
+            Err(Self::Negative)?;
+        }
+
+        Ok(())
+    }
+}
+
+struct WsworEntry<F: Float, T> {
+    weight: F,
+    val: T,
+}
+
+impl<F: Float, T> PartialOrd for WsworEntry<F, T> {
     fn partial_cmp(
         &self,
         other: &Self,
-    ) -> Option<Ordering>
-    {
+    ) -> Option<Ordering> {
         self.weight.partial_cmp(&other.weight)
     }
 }
 
-impl<T> PartialEq for WsworEntry<T> {
+impl<F: Float, T> PartialEq for WsworEntry<F, T>
+where
+    F: Float,
+{
     fn eq(
         &self,
         other: &Self,
-    ) -> bool
-    {
+    ) -> bool {
         self.weight.eq(&other.weight)
     }
 }
 
-impl<T> Eq for WsworEntry<T> {
-}
+// we'll enforce total ordering ourselves; we can take care of this
+impl<F: Float, T> Eq for WsworEntry<F, T> {}
 
-impl<T> Ord for WsworEntry<T> {
+impl<F: Float, T> Ord for WsworEntry<F, T> {
     fn cmp(
         &self,
         other: &Self,
-    ) -> Ordering
-    {
+    ) -> Ordering {
         self.weight.partial_cmp(&other.weight).unwrap()
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-pub struct StreamingWswor<T> {
+/// One-pass Weighted Random Sampler Without Replacement.
+///
+/// Can sample any number of elements.
+pub struct StreamingWswor<F: Float, T> {
     count: usize,
-    heap:  BinaryHeap<WsworEntry<T>>,
+    heap: BinaryHeap<WsworEntry<F, T>>,
 }
 
-impl<T> StreamingWswor<T> {
-    pub fn new(count: usize) -> StreamingWswor<T> {
+impl<F, T> StreamingWswor<F, T>
+where
+    F: Float,
+    Exp1: Distribution<F>,
+{
+    pub fn new(count: usize) -> StreamingWswor<F, T> {
         StreamingWswor {
             count,
             heap: BinaryHeap::with_capacity(count + 1),
@@ -95,10 +118,9 @@ impl<T> StreamingWswor<T> {
     /// invalid weight is detected
     pub fn feed_iter<R: RngCore>(
         &mut self,
-        iter: impl Iterator<Item = (FLOAT, T)>,
+        iter: impl Iterator<Item = (F, T)>,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights>
-    {
+    ) -> Result<(), HasInvalidWeights> {
         for (w, v) in iter {
             self.feed(v, w, rng)?;
         }
@@ -109,29 +131,21 @@ impl<T> StreamingWswor<T> {
     pub fn feed<R: RngCore>(
         &mut self,
         val: T,
-        weight: FLOAT,
+        weight: F,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights>
-    {
-        match weight.classify() {
-            Nan | Infinite => Err(HasInvalidWeights)?,
-            _ => {},
-        }
-
-        if weight.is_sign_negative() {
-            Err(HasInvalidWeights)?;
-        }
+    ) -> Result<(), HasInvalidWeights> {
+        HasInvalidWeights::check_weight(&weight)?;
 
         let mut dist = Exp1.sample_iter(rng);
 
         let entry = WsworEntry {
             val,
             weight: {
-                if weight == 0. {
-                    COREFLOAT::MAX
+                if weight == F::zero() {
+                    F::max_value()
                 }
                 else {
-                    let random: FLOAT = dist.next().unwrap();
+                    let random: F = dist.next().unwrap();
                     random / weight
                 }
             },
@@ -155,61 +169,80 @@ impl<T> StreamingWswor<T> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
+/// Special case for the One-pass Weighted Sampler where you just need one item
+/// sampled.
+pub struct SingleStreamingWs<F: Float, T> {
+    value: Option<T>,
+    exp_value_weight: F,
+}
 
-pub struct SingleStreamingWs<T>(StreamingWswor<T>);
-
-impl<T> SingleStreamingWs<T> {
-    pub fn new() -> SingleStreamingWs<T> {
-        SingleStreamingWs(StreamingWswor::new(1))
+impl<F, T> SingleStreamingWs<F, T>
+where
+    F: Float,
+    Exp1: Distribution<F>,
+{
+    pub fn new() -> SingleStreamingWs<F, T> {
+        SingleStreamingWs {
+            value: None,
+            exp_value_weight: F::zero(),
+        }
     }
 
     pub fn feed<R: RngCore>(
         &mut self,
         val: T,
-        weight: FLOAT,
+        weight: F,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights>
-    {
-        self.0.feed(val, weight, rng)
+    ) -> Result<(), HasInvalidWeights> {
+        HasInvalidWeights::check_weight(&weight)?;
+        let mut dist = Exp1.sample_iter(rng);
+        let exp_weight = dist.next().unwrap() / weight;
+
+        if self.value.is_none() {
+            self.value = Some(val);
+            self.exp_value_weight = exp_weight
+        }
+        else if exp_weight < self.exp_value_weight {
+            self.value = Some(val);
+            self.exp_value_weight = exp_weight;
+        }
+
+        Ok(())
     }
 
     pub fn feed_iter<R: RngCore>(
         &mut self,
-        iter: impl Iterator<Item = (FLOAT, T)>,
+        iter: impl Iterator<Item = (F, T)>,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights>
-    {
-        self.0.feed_iter(iter, rng)
+    ) -> Result<(), HasInvalidWeights> {
+        for (w, v) in iter {
+            self.feed(v, w, rng)?;
+        }
+
+        Ok(())
     }
 
     pub fn get(&self) -> Option<&T> {
-        self.0.iter().next()
+        self.value.as_ref()
     }
 
-    pub fn take(self) -> Option<T> {
-        self.0.take().next()
+    pub fn take(mut self) -> Option<T> {
+        self.value.take()
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-pub fn wswor<T, R>(
-    iter: impl Iterator<Item = (FLOAT, T)>,
+/// Quick and easy weighted random sampling without replacement.
+pub fn wswor<F: Float, T, R: RngCore>(
+    iter: impl Iterator<Item = (F, T)>,
     rng: &mut R,
     count: usize,
 ) -> Result<impl Iterator<Item = T>, HasInvalidWeights>
 where
+    F: Float,
     R: RngCore,
+    Exp1: Distribution<F>,
 {
     let mut heap = StreamingWswor::new(count);
     heap.feed_iter(iter, rng)?;
     Ok(heap.take())
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-#[cfg(feature = "gitversion")]
-pub fn git_version() -> &'static str {
-    git_version::git_version!()
 }
