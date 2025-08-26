@@ -8,8 +8,8 @@ use core::{
 };
 use std::{
     collections::BinaryHeap,
-    fmt::Display,
     error::Error,
+    fmt::Display,
 };
 
 use num::Float;
@@ -27,12 +27,19 @@ pub enum HasInvalidWeights {
 }
 
 impl Display for HasInvalidWeights {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Cannot sample over values with {} weights.", match self {
-            HasInvalidWeights::NaN => "NaN",
-            HasInvalidWeights::Infinite => "infinite",
-            HasInvalidWeights::Negative => "negative",
-        })
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(
+            f,
+            "Cannot sample over values with {} weights.",
+            match self {
+                HasInvalidWeights::NaN => "NaN",
+                HasInvalidWeights::Infinite => "infinite",
+                HasInvalidWeights::Negative => "negative",
+            }
+        )
     }
 }
 
