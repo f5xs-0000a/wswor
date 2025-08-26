@@ -5,10 +5,6 @@ authors = ["F5XS <f5xs.0000a@gmail.com>"]
 edition = "2021"
 license = "MIT"
 
-[features]
-FLOAT32 = []
-gitversion = []
-
 [dependencies]
 num = "0.4"
 rand = "0.9"
