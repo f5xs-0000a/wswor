@@ -187,6 +187,14 @@ where
         Ok(())
     }
 
+    pub fn is_full(&self) -> bool {
+        self.count <= self.heap.len()
+    }
+
+    pub fn threshold_weight(&self) -> Option<F> {
+        self.heap.peek().map(|entry| entry.weight)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.heap.iter().map(|entry| &entry.val)
     }
