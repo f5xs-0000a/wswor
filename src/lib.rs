@@ -143,7 +143,7 @@ where
         val: T,
         weight: F,
         rng: &mut R,
-    ) -> Result<(), HasInvalidWeights> {
+    ) -> Result<bool, HasInvalidWeights> {
         HasInvalidWeights::check_weight(&weight)?;
 
         let mut dist = Exp1.sample_iter(rng);
@@ -166,7 +166,7 @@ where
         if self.count == 0 {
             while self.heap.pop().is_some() {}
 
-            return Ok(());
+            return Ok(false);
         }
 
         // a really fast guard so we don't have to push and then drop the same
@@ -174,7 +174,7 @@ where
         // list
         if self.count <= self.heap.len() {
             if self.heap.peek().unwrap().weight < entry.weight {
-                return Ok(());
+                return Ok(false);
             }
         }
 
@@ -184,7 +184,7 @@ where
             self.heap.pop();
         }
 
-        Ok(())
+        Ok(true)
     }
 
     pub fn is_full(&self) -> bool {
